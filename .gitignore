@@ -1,0 +1,10 @@
+# WiFi 密碼檔案
+credentials.h
+
+# Arduino / IDE 暫存檔
+.arduino/
+build/
+libraries/
+*.zip
+*.exe
+arduino-cli-bin/
