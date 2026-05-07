@@ -1,9 +1,11 @@
+#include <Adafruit_AHTX0.h>
+#include <Adafruit_BMP280.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
-#include <DHT.h>
 #include <SPI.h>
 #include <WiFi.h>
-#include <WiFiManager.h>  // WiFiManager by tzapu (安裝: PIO lib / Arduino Library Manager)
+#include <WiFiManager.h>
+#include <Wire.h>
 #include <time.h>
 
 
@@ -11,8 +13,9 @@
 //              用戶配置區域
 // ==========================================
 
-#define DHTPIN 4
-#define DHTTYPE DHT11
+// I2C 腳位設定 (AHT20 & BMP280)
+#define I2C_SDA 4
+#define I2C_SCL 5
 
 // ST7735 螢幕腳位
 #define TFT_CS 10
@@ -42,10 +45,13 @@ const char *ntpServer = "pool.ntp.org";
 // ==========================================
 Adafruit_ST7735 tft =
     Adafruit_ST7735(TFT_CS, TFT_DC, TFT_MOSI, TFT_SCLK, TFT_RST);
-DHT dht(DHTPIN, DHTTYPE);
+
+Adafruit_AHTX0 aht;
+Adafruit_BMP280 bmp;
 
 float temp = 0.0;
 float hum = 0.0;
+float pres = 0.0;
 unsigned long lastSensorTime = 0;
 
 // 螢幕狀態與防彈跳
@@ -91,9 +97,17 @@ void setup() {
   tft.setTextColor(ST7735_WHITE);
   tft.setTextSize(1);
   tft.setCursor(0, 0);
-  tft.println("Booting...");
+  // 初始化 I2C
+  Wire.begin(I2C_SDA, I2C_SCL);
 
-  dht.begin();
+  // 初始化感測器
+  Serial.println("Initializing AHT20 & BMP280...");
+  if (!aht.begin()) {
+    Serial.println("Could not find AHT20!");
+  }
+  if (!bmp.begin(0x77)) { // 通常 AHT20+BMP280 模組的 BMP280 地址是 0x77
+    Serial.println("Could not find BMP280!");
+  }
 
   // ==========================================
   //   WiFiManager 配網
@@ -191,8 +205,13 @@ void loop() {
 
   // 感測器更新 (2秒)
   if (millis() - lastSensorTime > 2000) {
-    temp = dht.readTemperature();
-    hum = dht.readHumidity();
+    sensors_event_t humidity, temp_event;
+    aht.getEvent(&humidity, &temp_event);
+    
+    temp = temp_event.temperature;
+    hum = humidity.relative_humidity;
+    pres = bmp.readPressure() / 100.0F; // 轉換為 hPa
+    
     lastSensorTime = millis();
     updateSensorDisplay();
   }
@@ -275,7 +294,6 @@ void drawUI() {
   tft.setCursor(10, 5);
   tft.print("Weather Station");
 
-  // 根據旋轉方向調整線段寬度 (簡單處理)
   int w = (currentRotation % 2 == 0) ? 128 : 160;
   tft.drawFastHLine(0, 18, w, ST7735_WHITE);
 
@@ -286,27 +304,35 @@ void drawUI() {
   tft.setCursor(85, 50);
   tft.setTextColor(ST7735_BLUE);
   tft.print("Hum:");
+
+  tft.setCursor(5, 85);
+  tft.setTextColor(ST7735_ORANGE);
+  tft.print("Pressure:");
 }
 
 void updateSensorDisplay() {
-  if (isnan(temp) || isnan(hum)) {
-    Serial.println("Sensor read failed!");
-    return;
-  }
-
-  tft.setCursor(5, 65);
   tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
+  
+  // 溫度
+  tft.setCursor(5, 65);
   tft.setTextSize(2);
   tft.print((int)temp);
   tft.setTextSize(1);
   tft.print(" C");
 
+  // 濕度
   tft.setCursor(85, 65);
-  tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
   tft.setTextSize(2);
   tft.print((int)hum);
   tft.setTextSize(1);
   tft.print(" %");
+
+  // 氣壓
+  tft.setCursor(5, 100);
+  tft.setTextSize(2);
+  tft.print((int)pres);
+  tft.setTextSize(1);
+  tft.print(" hPa");
 }
 
 void updateTimeDisplay() {
