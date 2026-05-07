@@ -65,6 +65,9 @@ bool longPressHandled = false;     // 避免長按重複觸發
 int lastSec = -1;
 int lastDay = -1;
 
+bool ahtEnabled = false;
+bool bmpEnabled = false;
+
 // WiFi 重連控制
 unsigned long lastReconnectTime = 0;
 const unsigned long RECONNECT_INTERVAL = 10000; // 每 10 秒重連一次
@@ -94,20 +97,46 @@ void setup() {
   tft.setRotation(currentRotation);
   tft.fillScreen(ST7735_BLACK);
 
-  tft.setTextColor(ST7735_WHITE);
-  tft.setTextSize(1);
-  tft.setCursor(0, 0);
   // 初始化 I2C
   Wire.begin(I2C_SDA, I2C_SCL);
+  delay(100); // 給 I2C 設備一點啟動時間
+
+  // --- I2C 掃描器 (偵測設備地址) ---
+  Serial.println("Scanning I2C...");
+  tft.println("Scanning I2C...");
+  for (byte address = 1; address < 127; address++) {
+    Wire.beginTransmission(address);
+    if (Wire.endTransmission() == 0) {
+      tft.print("Found: 0x");
+      tft.println(address, HEX);
+      Serial.print("I2C device found at address 0x");
+      Serial.println(address, HEX);
+      if (address == 0x38) ahtEnabled = true;
+      if (address == 0x76 || address == 0x77) bmpEnabled = true;
+    }
+  }
 
   // 初始化感測器
-  Serial.println("Initializing AHT20 & BMP280...");
-  if (!aht.begin()) {
-    Serial.println("Could not find AHT20!");
+  if (ahtEnabled) {
+    if (!aht.begin()) {
+      ahtEnabled = false;
+      Serial.println("AHT20 begin failed!");
+    }
   }
-  if (!bmp.begin(0x77)) { // 通常 AHT20+BMP280 模組的 BMP280 地址是 0x77
-    Serial.println("Could not find BMP280!");
+  
+  if (bmpEnabled) {
+    // 優先試 0x77，失敗試 0x76
+    if (!bmp.begin(0x77)) {
+      if (!bmp.begin(0x76)) {
+        bmpEnabled = false;
+        Serial.println("BMP280 begin failed!");
+      }
+    }
   }
+  
+  if (!ahtEnabled) tft.println("AHT20 not found");
+  if (!bmpEnabled) tft.println("BMP280 not found");
+  delay(1000);
 
   // ==========================================
   //   WiFiManager 配網
@@ -205,12 +234,24 @@ void loop() {
 
   // 感測器更新 (2秒)
   if (millis() - lastSensorTime > 2000) {
-    sensors_event_t humidity, temp_event;
-    aht.getEvent(&humidity, &temp_event);
+    bool ahtSuccess = false;
+    if (ahtEnabled) {
+      sensors_event_t humidity, temp_event;
+      if (aht.getEvent(&humidity, &temp_event)) {
+        temp = temp_event.temperature;
+        hum = humidity.relative_humidity;
+        ahtSuccess = true;
+      }
+    }
     
-    temp = temp_event.temperature;
-    hum = humidity.relative_humidity;
-    pres = bmp.readPressure() / 100.0F; // 轉換為 hPa
+    if (bmpEnabled) {
+      float bTemp = bmp.readTemperature();
+      pres = bmp.readPressure() / 100.0F;
+      // 如果 AHT20 讀取失敗或數值異常 (-40度以下通常是異常)，使用 BMP280 的溫度
+      if (!ahtSuccess || temp < -40.0) {
+        temp = bTemp;
+      }
+    }
     
     lastSensorTime = millis();
     updateSensorDisplay();
@@ -297,42 +338,63 @@ void drawUI() {
   int w = (currentRotation % 2 == 0) ? 128 : 160;
   tft.drawFastHLine(0, 18, w, ST7735_WHITE);
 
-  tft.setCursor(5, 50);
+  // 標籤位置調寬一點
   tft.setTextColor(ST7735_YELLOW);
+  tft.setCursor(5, 50);
   tft.print("Temp:");
 
-  tft.setCursor(85, 50);
   tft.setTextColor(ST7735_BLUE);
+  tft.setCursor(95, 50); // 向右移一點
   tft.print("Hum:");
 
-  tft.setCursor(5, 85);
   tft.setTextColor(ST7735_ORANGE);
+  tft.setCursor(5, 85);
   tft.print("Pressure:");
 }
 
 void updateSensorDisplay() {
+  // 使用矩形清除區域以徹底消除殘影
+  int valY = 65;
+  int presY = 100;
+  
   tft.setTextColor(ST7735_WHITE, ST7735_BLACK);
   
-  // 溫度
-  tft.setCursor(5, 65);
-  tft.setTextSize(2);
-  tft.print((int)temp);
-  tft.setTextSize(1);
-  tft.print(" C");
+  // 溫度顯示
+  tft.fillRect(5, valY, 70, 16, ST7735_BLACK); // 先清空溫度區域
+  tft.setCursor(5, valY);
+  if (ahtEnabled || bmpEnabled) {
+    tft.setTextSize(2);
+    tft.print((int)temp);
+    tft.setTextSize(1);
+    tft.print(" C");
+  } else {
+    tft.print("ERR");
+  }
 
-  // 濕度
-  tft.setCursor(85, 65);
-  tft.setTextSize(2);
-  tft.print((int)hum);
-  tft.setTextSize(1);
-  tft.print(" %");
+  // 濕度顯示
+  tft.fillRect(95, valY, 60, 16, ST7735_BLACK); // 先清空濕度區域
+  tft.setCursor(95, valY);
+  if (ahtEnabled) {
+    tft.setTextSize(2);
+    tft.print((int)hum);
+    tft.setTextSize(1);
+    tft.print(" %");
+  } else {
+    tft.print("ERR");
+  }
 
-  // 氣壓
-  tft.setCursor(5, 100);
-  tft.setTextSize(2);
-  tft.print((int)pres);
-  tft.setTextSize(1);
-  tft.print(" hPa");
+  // 氣壓顯示
+  tft.fillRect(5, presY, 120, 16, ST7735_BLACK); // 先清空氣壓區域
+  tft.setCursor(5, presY);
+  if (bmpEnabled) {
+    tft.setTextSize(2);
+    tft.print((int)pres);
+    tft.setTextSize(1);
+    tft.print(" hPa");
+  } else {
+    tft.setTextSize(1);
+    tft.print("Sensor ERR");
+  }
 }
 
 void updateTimeDisplay() {
@@ -362,7 +424,7 @@ void updateTimeDisplay() {
   }
 
   if (lastDay != timeinfo.tm_mday) {
-    tft.setCursor(30, 100);
+    tft.setCursor(35, 118);
     tft.setTextColor(ST7735_MAGENTA, ST7735_BLACK);
     tft.setTextSize(1);
 
