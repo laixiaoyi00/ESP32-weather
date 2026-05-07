@@ -59,6 +59,10 @@ bool longPressHandled = false;     // 避免長按重複觸發
 int lastSec = -1;
 int lastDay = -1;
 
+// WiFi 重連控制
+unsigned long lastReconnectTime = 0;
+const unsigned long RECONNECT_INTERVAL = 10000; // 每 10 秒重連一次
+
 // 函數宣告
 void drawUI();
 void updateSensorDisplay();
@@ -97,7 +101,23 @@ void setup() {
   Serial.println("Starting WiFiManager...");
   tft.println("WiFi Setup...");
 
+  // --- 新增：啟動時按鈕檢查 ---
+  // 如果開機看到 "WiFi Setup" 時按住按鈕 2 秒，直接強制重置 WiFi
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    unsigned long bootCheckStart = millis();
+    tft.println("Hold to reset...");
+    while (digitalRead(BUTTON_PIN) == LOW) {
+      if (millis() - bootCheckStart > 2000) {
+        resetWiFiAndReboot();
+      }
+      delay(10);
+    }
+  }
+
   WiFiManager wm;
+  
+  // 設定連接超時：如果 15 秒內連不上已儲存的 WiFi，就進入 AP 模式
+  wm.setConnectTimeout(15); 
 
   // 配網超時：180 秒內沒完成就重啟
   wm.setConfigPortalTimeout(180);
@@ -128,13 +148,27 @@ void setup() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   tft.println("Syncing Time...");
   struct tm timeinfo;
-  while (!getLocalTime(&timeinfo)) {
+  
+  unsigned long startSync = millis();
+  // 最多等待 15 秒同步時間，期間允許偵測按鈕（方便在同步時重置 WiFi）
+  while (!getLocalTime(&timeinfo, 100)) { 
+    handleButton(); // 關鍵：在等待時也要能偵測按鈕
+    
+    if (millis() - startSync > 15000) {
+      Serial.println("\nTime Sync Timeout!");
+      tft.println("Time Sync Timeout");
+      break;
+    }
+    
     tft.print(".");
     Serial.print(".");
-    delay(500);
+    delay(400); 
   }
-  Serial.println("\nTime Synced!");
-  tft.println("Time Ready!");
+  
+  if (millis() - startSync <= 15000) {
+    Serial.println("\nTime Synced!");
+    tft.println("Time Ready!");
+  }
   delay(1000);
 
   // 主畫面
@@ -148,8 +182,11 @@ void loop() {
 
   // WiFi 保持連線
   if (WiFi.status() != WL_CONNECTED) {
-    // 斷線了，可在此加重連邏輯
-    WiFi.reconnect();
+    if (millis() - lastReconnectTime > RECONNECT_INTERVAL) {
+      Serial.println("WiFi disconnected, attempting reconnect...");
+      WiFi.reconnect();
+      lastReconnectTime = millis();
+    }
   }
 
   // 感測器更新 (2秒)
@@ -274,7 +311,8 @@ void updateSensorDisplay() {
 
 void updateTimeDisplay() {
   struct tm timeinfo;
-  if (!getLocalTime(&timeinfo))
+  // 使用極短超時 (5ms)，如果時間未同步則不更新，避免阻塞 loop
+  if (!getLocalTime(&timeinfo, 5))
     return;
 
   if (lastSec != timeinfo.tm_sec) {
