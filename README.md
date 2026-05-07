@@ -14,43 +14,66 @@
   - **短按按鈕**：切換螢幕旋轉方向（0° / 90° / 180° / 270°）。
   - **長按按鈕 (3秒)**：重置 WiFi 設定並重新進入配網模式。
 
-## 🛠️ 硬體清單
+## 🛠️ 硬體清單與接線 (Hardware & Wiring)
 
+### 核心元件
 - **主控板**：ESP32-S3
 - **顯示器**：ST7735 TFT (128x160)
 - **感測器**：DHT11 (或 DHT22)
-- **其他**：按鈕 x1 (GPIO 14)
+- **按鈕**：自鎖或觸點按鈕 x1
 
-## 🚀 快速開始
+### 詳細接線圖
+| 元件 | 引腳 | ESP32-S3 腳位 (GPIO) | 備註 |
+| :--- | :--- | :--- | :--- |
+| **ST7735 TFT** | VCC | 3V3 | |
+| | GND | GND | |
+| | CS | GPIO 10 | 片選 |
+| | RESET | GPIO 46 | 重置 |
+| | DC | GPIO 9 | 數據/指令 |
+| | SDA | GPIO 11 | MOSI |
+| | SCL | GPIO 12 | SCLK |
+| | BLK | GPIO 0 | 背光控制 |
+| **DHT11** | VCC | 3V3 | |
+| | GND | GND | |
+| | DATA | GPIO 4 | 數據傳輸 |
+| **按鈕** | Pin 1 | GPIO 14 | 訊號端 |
+| | Pin 2 | GND | 接地端 |
 
-1. **硬體連接**：參考程式碼中的腳位定義 (TFT_CS, DHTPIN 等) 進行接線。
-2. **安裝程式庫**：
-   - `WiFiManager`
-   - `Adafruit ST7735`
-   - `Adafruit GFX`
-   - `DHT sensor library`
-3. **燒錄程式**：使用 Arduino IDE 或 arduino-cli 將 `ew.ino` 燒錄至開發板。
-4. **設定 WiFi**：
-   - 用手機連線至 WiFi 熱點 `WeatherStation`。
-   - 在彈出的網頁中選擇你的 WiFi 並輸入密碼。
-   - 儲存後裝置將自動重啟並開始運作！
+## 🚀 快速開始 (Quick Start)
+
+### 1. 安裝必要程式庫
+請在 Arduino IDE 的「程式庫管理器」中搜尋並安裝以下套件：
+- `WiFiManager` (by tzapu)
+- `Adafruit ST7735 and ST7789 Library`
+- `Adafruit GFX Library`
+- `DHT sensor library` (by Adafruit)
+
+### 2. 燒錄程式
+1. 下載本專案。
+2. 使用 Arduino IDE 打開 `ESP32-weather/ESP32-weather.ino`。
+3. 開發板選擇 `ESP32-S3 Dev Module`。
+4. 點擊「上傳」。
+
+### 3. WiFi 配網
+- 首次啟動時，螢幕會顯示 `WiFi Setup...`。
+- 用手機搜尋並連線至 WiFi 熱點：`WeatherStation`。
+- 在跳出的網頁中選擇您的 WiFi 並輸入密碼，儲存後裝置會自動重啟。
+- **強制重置**：若需更換 WiFi，可在開機看到 `WiFi Setup` 時按住按鈕 2 秒，或在運行中長按 3 秒。
 
 ## 📄 專案結構
+- `ESP32-weather/`: 包含主程式 `.ino` 檔案。
+- `credentials.h`: (選用) 用於靜態帳密配置，建議使用 WiFiManager。
+- `build/`: 包含不同版本的編譯韌體 (.bin)。
 
-- `ESP32-weather/ESP32-weather.ino`: 主程式邏輯。
-- `.gitignore`: 已自動忽略敏感資訊及暫存檔。
+## 🕒 更新日誌 (Changelog)
 
-## 🕒 更新日誌
+### [v0.2.0] - 2026-05-07
+- **優化按鈕響應**：解決 WiFi 斷線時按鈕失效問題。
+- **改善開機體驗**：新增開機 2 秒強制重置功能。
+- **優化系統效率**：縮短連線超時至 15 秒，改採非阻塞時間同步邏輯。
 
-### v0.2.0 (2026-05-07)
-- **優化按鈕響應**：解決了在 WiFi 斷線或 NTP 同步時按鈕失效的問題。
-- **改善開機體驗**：
-  - 新增「開機強制重置」功能：開機時按住按鈕 2 秒可直接進入配網模式。
-  - 縮短 WiFi 連線超時時間至 15 秒，加快進入 AP 模式的速度。
-- **防止系統卡死**：優化了 `getLocalTime` 的超時處理，確保即使無網路，主迴圈依然能運作偵測按鈕。
-
-### v0.1.0 (2026-05-06)
-- **初始版本發布**：實作基本溫濕度監測、NTP 時間同步、TFT 螢幕顯示及 WiFiManager 基礎配網功能。
+### [v0.1.0] - 2026-05-06
+- **初始版本**：基本溫濕度監測與 NTP 時間顯示。
 
 ---
 *Made with ❤️ by laixiaoyi00*
