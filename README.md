@@ -62,6 +62,14 @@
 - 在跳出的網頁中選擇您的 WiFi 並輸入密碼，儲存後裝置會自動重啟。
 - **強制重置**：若需更換 WiFi，可在開機看到 `WiFi Setup` 時按住按鈕 2 秒，或在運行中長按 3 秒。
 
+### 4. 註冊與設定 ThingSpeak (雲端資料庫)
+如果您希望使用雲端同步與網頁端應用功能，您需要註冊一組自己的 ThingSpeak 帳號 (為 MathWorks 旗下服務，需註冊 MathWorks 帳號)：
+1. 前往 [ThingSpeak 官網](https://thingspeak.com/) 註冊並登入。
+2. 點擊 `New Channel` 建立新頻道，並啟用 `Field 1` (用於溫度) 與 `Field 2` (用於濕度)。
+3. 在 `API Keys` 頁籤中，取得您的 `Write API Key` 與 `Read API Key`。
+4. **修改 ESP32 程式碼**：將 `ESP32-weather/ESP32-weather.ino` 中的 `THINGSPEAK_API_KEY` 替換為您的 `Write API Key`。
+5. **修改網頁端程式碼**：將 `app/app.js` 中的 `CONFIG.channelId` 與 `CONFIG.readApiKey` 替換為您的頻道 ID 與 `Read API Key`，並將 `app/index.html` 中的頻道 ID 顯示值替換為您的 ID。
+
 ## 📄 專案結構
 - `ESP32-weather/`: 包含主程式 `.ino` 檔案。
 - `credentials.h`: (選用) 用於靜態帳密配置，建議使用 WiFiManager。

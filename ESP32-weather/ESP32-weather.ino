@@ -41,7 +41,7 @@ const int daylightOffset_sec = 0;
 const char *ntpServer = "pool.ntp.org";
 
 // ThingSpeak 配置
-#define THINGSPEAK_API_KEY "CTOUUNZZ3KHVRGJ8" // Write API Key
+#define THINGSPEAK_API_KEY "YOUR_WRITE_API_KEY_HERE" // Write API Key
 #define THINGSPEAK_URL "http://api.thingspeak.com/update"
 unsigned long lastUploadTime = 0;
 const unsigned long UPLOAD_INTERVAL = 20000; // 每 20 秒上傳一次

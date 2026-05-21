@@ -5,8 +5,8 @@
 
 // ── ThingSpeak Configuration ──
 const CONFIG = {
-  channelId: '3390904',
-  readApiKey: 'OCMIZTU1DBQZC6L6',
+  channelId: 'YOUR_CHANNEL_ID_HERE',
+  readApiKey: 'YOUR_READ_API_KEY_HERE',
   refreshInterval: 30000,      // 30 seconds auto-refresh
   historyResults: 120,         // number of data points to fetch
   apiBase: 'https://api.thingspeak.com',
