@@ -70,6 +70,69 @@
 4. **修改 ESP32 程式碼**：將 `ESP32-weather/ESP32-weather.ino` 中的 `THINGSPEAK_API_KEY` 替換為您的 `Write API Key`。
 5. **修改網頁端程式碼**：將 `app/app.js` 中的 `CONFIG.channelId` 與 `CONFIG.readApiKey` 替換為您的頻道 ID 與 `Read API Key`，並將 `app/index.html` 中的頻道 ID 顯示值替換為您的 ID。
 
+### 5. 使用 GitHub Pages 架設網頁監控站
+您可以利用 GitHub 免費提供的 **GitHub Pages** 服務，將 `app/` 目錄部署為一個靜態網站，隨時用手機或電腦打開網址就能查看氣象數據，不需要自己架設伺服器！
+
+#### 步驟一：Fork 或上傳專案到你的 GitHub
+1. 如果您還沒有 GitHub 帳號，請先到 [github.com](https://github.com/) 註冊。
+2. 點擊本專案頁面右上角的 **「Fork」** 按鈕，將專案複製到您的帳號下。
+3. Fork 後，進入您的程式碼，修改 `app/app.js` 中的 `channelId` 與 `readApiKey` 為您自己的 ThingSpeak 頻道資訊（可直接在 GitHub 網頁上按鉛筆圖示編輯）。
+
+#### 步驟二：開啟 GitHub Pages
+1. 進入您 Fork 後的專案頁面（例如：`https://github.com/你的帳號/ESP32-weather`）。
+2. 點擊上方的 **「Settings」**（設定）標籤。
+3. 在左側選單中找到 **「Pages」** 並點擊。
+4. 在 **「Source」** 區塊中：
+   - **Branch**：選擇 `main`
+   - **Folder**：選擇 `/app`（⚠️ 如果沒有 `/app` 選項，請選 `/ (root)` 後依照步驟三操作）
+5. 點擊 **「Save」** 儲存。
+6. 等待約 1-2 分鐘，GitHub 會自動部署。
+
+#### 步驟三：若無法選擇 `/app` 資料夾
+GitHub Pages 預設只允許 `/ (root)` 或 `/docs` 作為來源資料夾。如果無法直接選 `/app`，請進行以下操作：
+
+**方法 A：將 `app` 資料夾改名為 `docs`**
+```bash
+git mv app docs
+git commit -m "rename app to docs for GitHub Pages"
+git push
+```
+然後在 Pages 設定中選擇 `/docs` 資料夾即可。
+
+**方法 B：使用 GitHub Actions 自動部署（進階）**
+1. 在 Pages 的 Source 選擇 **「GitHub Actions」**。
+2. 在專案根目錄建立 `.github/workflows/pages.yml`：
+```yaml
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [main]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+      - id: deployment
+        uses: actions/deploy-pages@v4
+```
+3. Push 後 GitHub 會自動部署 `app/` 資料夾的內容。
+
+#### 步驟四：訪問您的網站
+部署成功後，您的氣象站網頁將可以透過以下網址訪問：
+```
+https://你的帳號.github.io/ESP32-weather/
+```
+您可以在手機瀏覽器中打開這個網址，並選擇「加到主畫面」，就能像 App 一樣使用！📱
+
 ## 📄 專案結構
 - `ESP32-weather/`: 包含主程式 `.ino` 檔案。
 - `credentials.h`: (選用) 用於靜態帳密配置，建議使用 WiFiManager。
