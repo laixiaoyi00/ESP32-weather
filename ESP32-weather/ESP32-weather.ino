@@ -1,11 +1,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <DHT.h>
+#include <HTTPClient.h>
 #include <SPI.h>
 #include <WiFi.h>
-#include <WiFiManager.h>  // WiFiManager by tzapu (安裝: PIO lib / Arduino Library Manager)
+#include <WiFiManager.h> // WiFiManager by tzapu (安裝: PIO lib / Arduino Library Manager)
 #include <time.h>
-
 
 // ==========================================
 //              用戶配置區域
@@ -26,16 +26,22 @@
 //   短按 = 旋轉螢幕
 //   長按 3 秒 = 清除 WiFi 設定並重啟進入配網模式
 #define BUTTON_PIN 14
-#define LONG_PRESS_MS 3000  // 長按判定門檻 (ms)
+#define LONG_PRESS_MS 3000 // 長按判定門檻 (ms)
 
 // WiFiManager AP 設定 (首次配網時的熱點名稱)
 #define AP_NAME "WeatherStation"
-#define AP_PASS ""  // 留空 = 開放 AP，填入 8+ 字元可加密
+#define AP_PASS "" // 留空 = 開放 AP，填入 8+ 字元可加密
 
 // 時區
 const long gmtOffset_sec = 8 * 3600;
 const int daylightOffset_sec = 0;
 const char *ntpServer = "pool.ntp.org";
+
+// ThingSpeak 配置
+#define THINGSPEAK_API_KEY "CTOUUNZZ3KHVRGJ8" // Write API Key
+#define THINGSPEAK_URL "http://api.thingspeak.com/update"
+unsigned long lastUploadTime = 0;
+const unsigned long UPLOAD_INTERVAL = 20000; // 每 20 秒上傳一次
 
 // ==========================================
 //              物件初始化與全域變數
@@ -52,8 +58,8 @@ unsigned long lastSensorTime = 0;
 int currentRotation = 1;
 int lastButtonState = HIGH;
 unsigned long lastButtonTime = 0;
-unsigned long buttonDownTime = 0;  // 記錄按下的時刻
-bool longPressHandled = false;     // 避免長按重複觸發
+unsigned long buttonDownTime = 0; // 記錄按下的時刻
+bool longPressHandled = false;    // 避免長按重複觸發
 
 // 顯示緩衝 (用來強制刷新的變數)
 int lastSec = -1;
@@ -69,6 +75,7 @@ void updateSensorDisplay();
 void updateTimeDisplay();
 void handleButton();
 void resetWiFiAndReboot();
+void uploadToThingSpeak();
 
 void setup() {
   Serial.begin(115200);
@@ -115,9 +122,9 @@ void setup() {
   }
 
   WiFiManager wm;
-  
+
   // 設定連接超時：如果 15 秒內連不上已儲存的 WiFi，就進入 AP 模式
-  wm.setConnectTimeout(15); 
+  wm.setConnectTimeout(15);
 
   // 配網超時：180 秒內沒完成就重啟
   wm.setConfigPortalTimeout(180);
@@ -148,23 +155,23 @@ void setup() {
   configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   tft.println("Syncing Time...");
   struct tm timeinfo;
-  
+
   unsigned long startSync = millis();
   // 最多等待 15 秒同步時間，期間允許偵測按鈕（方便在同步時重置 WiFi）
-  while (!getLocalTime(&timeinfo, 100)) { 
+  while (!getLocalTime(&timeinfo, 100)) {
     handleButton(); // 關鍵：在等待時也要能偵測按鈕
-    
+
     if (millis() - startSync > 15000) {
       Serial.println("\nTime Sync Timeout!");
       tft.println("Time Sync Timeout");
       break;
     }
-    
+
     tft.print(".");
     Serial.print(".");
-    delay(400); 
+    delay(400);
   }
-  
+
   if (millis() - startSync <= 15000) {
     Serial.println("\nTime Synced!");
     tft.println("Time Ready!");
@@ -197,6 +204,15 @@ void loop() {
     updateSensorDisplay();
   }
 
+  // ThingSpeak 上傳 (20秒)
+  if (WiFi.status() == WL_CONNECTED &&
+      millis() - lastUploadTime > UPLOAD_INTERVAL) {
+    if (!isnan(temp) && !isnan(hum)) {
+      uploadToThingSpeak();
+    }
+    lastUploadTime = millis();
+  }
+
   // 時間更新 (1秒)
   updateTimeDisplay();
 
@@ -225,7 +241,8 @@ void handleButton() {
 
   // --- 放開瞬間 (Rising Edge)：短按 → 旋轉螢幕 ---
   if (currentState == HIGH && lastButtonState == LOW) {
-    if (!longPressHandled && (millis() - buttonDownTime > 50)) { // 50ms debounce
+    if (!longPressHandled &&
+        (millis() - buttonDownTime > 50)) { // 50ms debounce
       Serial.println("Short Press: Rotating Screen...");
 
       currentRotation = (currentRotation + 1) % 4;
@@ -265,6 +282,27 @@ void resetWiFiAndReboot() {
 
   delay(2000);
   ESP.restart();
+}
+
+// ================= ThingSpeak 上傳 =================
+
+void uploadToThingSpeak() {
+  HTTPClient http;
+  String url = String(THINGSPEAK_URL) + "?api_key=" + THINGSPEAK_API_KEY +
+               "&field1=" + String(temp, 1) + "&field2=" + String(hum, 1);
+
+  http.begin(url);
+  http.setTimeout(10000); // 10 秒超時
+  int httpCode = http.GET();
+
+  if (httpCode > 0) {
+    Serial.printf("ThingSpeak upload OK: %d (entry: %s)\n", httpCode,
+                  http.getString().c_str());
+  } else {
+    Serial.printf("ThingSpeak upload FAILED: %s\n",
+                  http.errorToString(httpCode).c_str());
+  }
+  http.end();
 }
 
 // ================= UI 繪製函數 =================

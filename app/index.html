@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0a1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="氣象站">
+  <meta name="description" content="ESP32 智慧家庭氣象站 — 隨時隨地查看家中溫度與濕度">
+  
+  <title>🌡️ 我的智慧氣象站</title>
+  
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌡️</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌡️</text></svg>">
+  
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+  <div class="app-container">
+
+    <!-- ── Header ── -->
+    <header class="header">
+      <span class="header-icon">🏠</span>
+      <h1>我的智慧氣象站</h1>
+      <p class="subtitle">ESP32-S3 · DHT11 · 即時監控</p>
+    </header>
+
+    <!-- ── Status Bar ── -->
+    <div class="status-bar">
+      <span class="status-dot loading"></span>
+      <span class="status-text">正在載入...</span>
+    </div>
+
+    <!-- ── Data Cards ── -->
+    <div class="cards-grid">
+
+      <!-- Temperature Card -->
+      <div class="data-card temp-card" id="temp-card">
+        <span class="card-icon">🌡️</span>
+        <span class="card-label">溫度</span>
+        
+        <!-- Loading Skeleton -->
+        <div class="skeleton-group">
+          <div class="skeleton skeleton-value"></div>
+          <div class="skeleton skeleton-text"></div>
+        </div>
+        
+        <!-- Real Data -->
+        <div class="real-data" style="display:none;">
+          <div class="card-value temp-comfortable" id="temp-value">
+            --<span class="unit">°C</span>
+          </div>
+          <div class="card-comfort" id="temp-comfort">載入中...</div>
+        </div>
+      </div>
+
+      <!-- Humidity Card -->
+      <div class="data-card hum-card" id="hum-card">
+        <span class="card-icon">💧</span>
+        <span class="card-label">濕度</span>
+        
+        <!-- Loading Skeleton -->
+        <div class="skeleton-group">
+          <div class="skeleton skeleton-value"></div>
+          <div class="skeleton skeleton-text"></div>
+        </div>
+        
+        <!-- Real Data -->
+        <div class="real-data" style="display:none;">
+          <div class="card-value hum-comfortable" id="hum-value">
+            --<span class="unit">%</span>
+          </div>
+          <div class="card-comfort" id="hum-comfort">載入中...</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── Comfort Banner ── -->
+    <div class="comfort-banner">
+      <span class="comfort-emoji">🏠</span>
+      <div class="comfort-info">
+        <div class="comfort-title">正在取得環境數據...</div>
+        <div class="comfort-desc">連接到 ThingSpeak 雲端，請稍候。</div>
+      </div>
+    </div>
+
+    <!-- ── History Chart ── -->
+    <div class="chart-section">
+      <div class="chart-header">
+        <div class="chart-title">
+          <span class="chart-title-icon">📊</span>
+          歷史趨勢
+        </div>
+        <div class="chart-period-btns">
+          <button class="period-btn" onclick="setPeriod(30, this)">30筆</button>
+          <button class="period-btn active" onclick="setPeriod(120, this)">120筆</button>
+          <button class="period-btn" onclick="setPeriod(480, this)">480筆</button>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="history-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ── Footer Actions ── -->
+    <div class="footer-actions">
+      <div class="last-update">
+        <span>🕐</span>
+        <span>最後更新：<strong id="update-time">--:--:--</strong></span>
+      </div>
+      <button class="refresh-btn" onclick="manualRefresh()" id="refresh-btn">
+        <span class="refresh-icon">🔄</span>
+        <span>刷新</span>
+      </button>
+    </div>
+
+    <!-- ── Auto Refresh Progress Bar ── -->
+    <div class="auto-refresh-bar">
+      <div class="auto-refresh-progress"></div>
+    </div>
+
+    <!-- ── Settings Info ── -->
+    <div class="settings-section">
+      <div class="settings-title">⚙️ 裝置資訊</div>
+      <div class="setting-row">
+        <span class="setting-label">頻道 ID</span>
+        <span class="setting-value">3390904</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">更新頻率</span>
+        <span class="setting-value">每 20 秒</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">自動刷新</span>
+        <span class="setting-value">每 30 秒</span>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">感測器</span>
+        <span class="setting-value">DHT11</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Error Overlay ── -->
+  <div class="error-overlay" id="error-overlay">
+    <div class="error-card">
+      <div class="error-icon">📡</div>
+      <div class="error-title">無法連線</div>
+      <div class="error-desc">無法從 ThingSpeak 取得數據。請確認 ESP32 已上傳數據。</div>
+      <button class="error-btn" onclick="hideError(); manualRefresh();">重新嘗試</button>
+    </div>
+  </div>
+
+  <!-- ── App Script ── -->
+  <script src="app.js"></script>
+
+  <!-- ── Register Service Worker ── -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('SW registered'))
+        .catch(err => console.log('SW registration failed:', err));
+    }
+  </script>
+
+</body>
+</html>
